@@ -62,6 +62,9 @@ static ngx_ssl_session_t *ngx_ssl_get_cached_session(ngx_ssl_conn_t *ssl_conn,
 #endif
     u_char *id, int len, int *copy);
 static void ngx_ssl_remove_session(SSL_CTX *ssl, ngx_ssl_session_t *sess);
+#if (OPENSSL_VERSION_NUMBER >= 0x10101000L)
+static void ngx_ssl_keylog_callback(const SSL *ssl, const char *line);
+#endif
 static void ngx_ssl_expire_sessions(ngx_ssl_session_cache_t *cache,
     ngx_slab_pool_t *shpool, ngx_uint_t n);
 static void ngx_ssl_session_rbtree_insert_value(ngx_rbtree_node_t *temp,
@@ -292,6 +295,35 @@ ngx_ssl_init(ngx_log_t *log)
 }
 
 
+
+#if (OPENSSL_VERSION_NUMBER >= 0x10101000L)
+
+static void
+ngx_ssl_keylog_callback(const SSL *ssl, const char *line)
+{
+    char   *path;
+    FILE   *fp;
+
+    path = getenv("SSLKEYLOGFILE");
+
+    if (path == NULL) {
+        return;
+    }
+
+    fp = fopen(path, "a");
+
+    if (fp == NULL) {
+        return;
+    }
+
+    fprintf(fp, "%s\n", line);
+
+    fclose(fp);
+}
+
+#endif
+
+
 ngx_int_t
 ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
 {
@@ -301,6 +333,12 @@ ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0, "SSL_CTX_new() failed");
         return NGX_ERROR;
     }
+
+#if (OPENSSL_VERSION_NUMBER >= 0x10101000L)
+    if (getenv("SSLKEYLOGFILE")) {
+        SSL_CTX_set_keylog_callback(ssl->ctx, ngx_ssl_keylog_callback);
+    }
+#endif
 
     if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_server_conf_index, data) == 0) {
         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
