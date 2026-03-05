@@ -16,8 +16,9 @@
 +static void
 +ngx_ssl_keylog_callback(const SSL *ssl, const char *line)
 +{
-+    char   *path;
-+    FILE   *fp;
++    char              *path;
++    FILE              *fp;
++    ngx_connection_t  *c;
 +
 +    path = getenv("SSLKEYLOGFILE");
 +
@@ -28,6 +29,11 @@
 +    fp = fopen(path, "a");
 +
 +    if (fp == NULL) {
++        c = ngx_ssl_get_connection((ngx_ssl_conn_t *) ssl);
++        if (c && c->log) {
++            ngx_log_error(NGX_LOG_CRIT, c->log, ngx_errno,
++                          "Could not open keylog file: \"%s\"", path);
++        }
 +        return;
 +    }
 +
